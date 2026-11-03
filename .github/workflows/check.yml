@@ -11,12 +11,19 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
       - name: Check addresses
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -24,6 +31,7 @@ jobs:
           DTEK_CITY: "м. Київ"
           DTEK_STREET_HINT: "Драгоманова"
         run: python main.py
+
       - name: Save status
         run: |
           if ! git diff --quiet -- state.json; then
