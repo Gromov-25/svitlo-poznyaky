@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 import os
@@ -10,30 +11,25 @@ from dtek_client import DtekClient
 from dtek_client.browser_auth import get_cleared_cookies
 from curl_cffi.requests import AsyncSession
 
-CITY = os.getenv("DTEK_CITY", "м. Київ")
-STREET_HINT = os.getenv("DTEK_STREET_HINT", "Драгоманова")
-CHANNEL = os.getenv("TELEGRAM_CHANNEL", "@Poznyaky_Svitlo24")
-
 BASE_URL = "https://www.dtek-kem.com.ua"
 SCHEDULE_URL = f"{BASE_URL}/ua/shutdowns"
 AJAX_URL = f"{BASE_URL}/ua/ajax"
 
+CITY = os.getenv("DTEK_CITY", "м. Київ")
+STREET_HINT = os.getenv("DTEK_STREET_HINT", "Драгоманова")
+CHANNEL = os.getenv("TELEGRAM_CHANNEL", "@Poznyaky_Svitlo24")
+
 STATE_FILE = Path("state.json")
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 
-HOUSES = {
-    "42": "вул. Драгоманова, 42",
-    "42А": "вул. Драгоманова, 42А",
-}
+HOUSES = ["42", "42А"]
 
 
 def load_state():
-    if STATE_FILE.exists():
-        try:
-            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {}
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 def save_state(state):
@@ -60,59 +56,64 @@ async def get_dtek_status():
         headers["X-CSRF-Token"] = csrf_token
 
     session = AsyncSession(
-        timeout=30.0,
+        timeout=30,
         headers=headers,
         cookies=cookies,
         impersonate="chrome120",
     )
 
-    async with DtekClient(
-        "kem",
-        ajax_url=AJAX_URL,
-        session=session,
-    ) as client:
-        streets = await client.get_streets(CITY)
+    try:
+        async with DtekClient(
+            "kem",
+            ajax_url=AJAX_URL,
+            session=session,
+        ) as client:
+            streets = await client.get_streets(CITY)
 
-        matches = [
-            s.name for s in streets
-            if STREET_HINT.casefold() in s.name.casefold()
-        ]
+            matches = [
+                street.name
+                for street in streets
+                if STREET_HINT.casefold() in street.name.casefold()
+            ]
 
-        if not matches:
-            raise RuntimeError("Не найдена улица Драгоманова в ДТЕК")
+            if not matches:
+                raise RuntimeError("Не найдена улица Драгоманова")
 
-        street_name = max(matches, key=len)
-        response = await client.get_home_num(CITY, street_name)
+            street_name = max(matches, key=len)
+            response = await client.get_home_num(CITY, street_name)
 
-        available = {
-            str(k).strip().upper(): v
-            for k, v in response.houses.items()
-        }
+            available = {
+                str(number).strip().upper(): entry
+                for number, entry in response.houses.items()
+            }
 
-        result = {}
+            result = {}
 
-        for house_no in HOUSES:
-            entry = available.get(house_no.upper())
+            for number in HOUSES:
+                entry = available.get(number.upper())
 
-            if entry is None:
-                raise RuntimeError(f"ДТЕК не вернул дом {house_no}")
+                if entry is None:
+                    raise RuntimeError(
+                        f"ДТЕК не вернул данные для дома {number}"
+                    )
 
-            result[house_no] = bool(entry.has_current_outage)
+                result[number] = bool(entry.has_current_outage)
 
-    await session.close()
-    return result, street_name
+            return result, street_name
+    finally:
+        await session.close()
 
 
-def make_message(house_no, outage, street_name, initial=False):
-    address = f"Київ, {street_name}, {house_no}"
+def make_message(number, outage, street_name, initial=False):
     now = datetime.now(KYIV_TZ).strftime("%d.%m.%Y о %H:%M")
+    address = f"Київ, {street_name}, {number}"
 
     if outage:
         title = "🔴 ДТЕК ПОВІДОМЛЯЄ ПРО ВІДКЛЮЧЕННЯ"
         detail = "За даними ДТЕК, за адресою є повідомлення про відключення."
     else:
         title = "🟢 ДТЕК НЕ ПОКАЗУЄ ВІДКЛЮЧЕННЯ"
-        detail = "За даними ДТЕК, активне відключення за адресою не відображається."
+        detail = "За даними ДТЕК, активне відключення не відображається."
 
     prefix = "Поточний статус" if initial else "Зміна статусу"
 
@@ -123,7 +124,7 @@ def make_message(house_no, outage, street_name, initial=False):
         f"{detail}\n"
         f"🕒 {prefix}: {now}\n\n"
         f"<i>Джерело: ДТЕК Київські електромережі. "
-        f"Дані можуть оновлюватися із затримкою та не є вимірюванням напруги в будинку.</i>"
+        f"Дані можуть оновлюватися із затримкою та не є вимірюванням напруги.</i>"
     )
 
 
@@ -133,26 +134,27 @@ async def main():
 
     old_state = load_state()
     current, street_name = await get_dtek_status()
-    new_state = {k: bool(v) for k, v in current.items()}
 
     first_run = not old_state
 
-    for house_no, outage in new_state.items():
-        changed = old_state.get(house_no) != outage
-
-        if first_run or changed:
+    for number, outage in current.items():
+        if first_run or old_state.get(number) != outage:
             await bot.send_message(
                 chat_id=CHANNEL,
                 text=make_message(
-                    house_no, outage, street_name, initial=first_run
+                    number, outage, street_name, first_run
                 ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
 
-    save_state(new_state)
-    print(f"OK: {new_state}; street={street_name}")
+    save_state(current)
+    print(f"OK: {current}; street={street_name}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as error:
+        print(f"ОШИБКА МОНИТОРИНГА: {type(error).__name__}: {error}")
+        raise
