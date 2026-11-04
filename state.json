@@ -1,6 +1,20 @@
 {
-  "Драгоманова, 42": false,
-  "Драгоманова, 42А": false,
-  "Урлівська, 36": false,
-  "Петра Григоренка, 21": false
+  "addresses": {
+    "Драгоманова, 42": {
+      "outage": false,
+      "event_time": null
+    },
+    "Драгоманова, 42А": {
+      "outage": false,
+      "event_time": null
+    },
+    "Урлівська, 36": {
+      "outage": true,
+      "event_time": "08:28"
+    },
+    "Петра Григоренка, 21": {
+      "outage": true,
+      "event_time": "08:28"
+    }
+  }
 }
