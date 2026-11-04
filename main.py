@@ -12,6 +12,7 @@ from dtek_client import DtekClient
 from dtek_client.browser_auth import get_cleared_cookies
 from curl_cffi.requests import AsyncSession
 
+
 BASE_URL = "https://www.dtek-kem.com.ua"
 SCHEDULE_URL = f"{BASE_URL}/ua/shutdowns"
 AJAX_URL = f"{BASE_URL}/ua/ajax"
@@ -26,6 +27,7 @@ ADDRESSES = {
     "Драгоманова, 42А": ("Драгоманова", "42/А"),
     "Урлівська, 36": ("Урлівська", "36"),
     "Петра Григоренка, 21": ("Петра Григоренка", "21"),
+    "Петра Григоренка, 22/20": ("Петра Григоренка", "22/20"),
 }
 
 
@@ -48,69 +50,83 @@ def save_state(state):
     )
 
 
-def get_schedule_slots(response, entry):
-    """Отримує години відключень із графіка ДТЕК."""
+def format_time(value):
+    if not value:
+        return None
 
+    if isinstance(value, datetime):
+        if value.tzinfo:
+            value = value.astimezone(KYIV)
+        return value.strftime("%H:%M")
+
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, KYIV).strftime("%H:%M")
+        except (ValueError, OSError):
+            return None
+
+    value = str(value).strip()
+
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(KYIV)
+        return parsed.strftime("%H:%M")
+    except ValueError:
+        return value
+
+
+def get_schedule_slots(response, entry):
     if not entry.group_ids:
         return []
 
-    slots_result = []
-
+    result = []
     fact = response.fact
     preset = response.preset
+    time_zone = getattr(preset, "time_zone", None) or {}
 
     for group_id in entry.group_ids:
         slots = None
 
-        # Спочатку використовуємо підтверджений графік на сьогодні.
         if fact:
             slots = fact.get_group_today(group_id)
 
-        # Якщо підтвердженого графіка немає,
-        # використовуємо опублікований план.
         if slots is None and preset:
             group = preset.groups.get(group_id)
-
             if group:
-                day = group.get_day(
-                    datetime.now(KYIV).isoweekday()
-                )
-
+                day = group.get_day(datetime.now(KYIV).isoweekday())
                 if day:
                     slots = day.slots
 
         if not slots:
             continue
 
-        time_zone = preset.time_zone if preset else {}
-
         for slot_id, status in sorted(
             slots.items(),
-            key=lambda item: int(item[0]) if item[0].isdigit() else 999,
+            key=lambda item: int(item[0]) if str(item[0]).isdigit() else 999,
         ):
             value = getattr(status, "value", str(status))
 
-            if value not in (
+            if value not in {
                 "no", "first", "second",
                 "maybe", "mfirst", "msecond",
-            ):
+            }:
                 continue
 
-            time_label = time_zone.get(slot_id)
+            label = time_zone.get(slot_id)
 
-            if isinstance(time_label, list):
-                time_label = time_label[0] if time_label else None
+            if isinstance(label, list):
+                label = label[0] if label else None
 
-            if time_label:
-                prefix = "Можливе відключення" if value in (
-                    "maybe", "mfirst", "msecond"
-                ) else "Відключення"
-
-                slots_result.append(
-                    f"{prefix}: {time_label}"
+            if label:
+                prefix = (
+                    "Можливе відключення"
+                    if value in {"maybe", "mfirst", "msecond"}
+                    else "Відключення"
                 )
+                result.append(f"{prefix}: {label}")
 
-    return list(dict.fromkeys(slots_result))
+    return list(dict.fromkeys(result))
 
 
 async def get_statuses():
@@ -156,11 +172,9 @@ async def get_statuses():
 
                 if "драгоманова" in lowered:
                     found_streets["Драгоманова"] = name
-
-                if "урлівська" in lowered or "урловская" in lowered:
+                elif "урлівська" in lowered or "урловская" in lowered:
                     found_streets["Урлівська"] = name
-
-                if "григоренка" in lowered:
+                elif "григоренка" in lowered:
                     found_streets["Петра Григоренка"] = name
 
             results = {}
@@ -174,7 +188,6 @@ async def get_statuses():
                         f"ДТЕК не знайшов вулицю: {street_key}"
                     )
 
-                # Один запит на кожну вулицю.
                 if street_name not in street_cache:
                     street_cache[street_name] = await client.get_home_num(
                         CITY,
@@ -188,38 +201,26 @@ async def get_statuses():
                     for number, entry in response.houses.items()
                 }
 
-                target = normalize_house(house_number)
-                entry = houses.get(target)
+                entry = houses.get(normalize_house(house_number))
 
                 if entry is None:
                     raise RuntimeError(
-                        f"ДТЕК не повернув будинок {address}. "
-                        f"Шукали номер: {target}"
+                        f"ДТЕК не повернув будинок {address}"
                     )
 
-                outage = bool(entry.has_current_outage)
-
-                reason = str(entry.sub_type or "").strip()
-                outage_type = str(entry.outage_type or "").strip()
-
                 graph_updated = None
-                info_updated = response.update_timestamp
-
                 if response.fact:
                     graph_updated = response.fact.update
 
-                schedule = get_schedule_slots(response, entry)
-
                 results[address] = {
-                    "outage": outage,
-                    "reason": reason,
-                    "outage_type": outage_type,
+                    "outage": bool(entry.has_current_outage),
+                    "reason": str(entry.sub_type or "").strip(),
+                    "outage_type": str(entry.outage_type or "").strip(),
                     "start_date": str(entry.start_date or ""),
                     "end_date": str(entry.end_date or ""),
-                    "has_schedule": not entry.is_excluded,
-                    "groups": list(entry.group_ids),
-                    "schedule": schedule,
-                    "info_updated": info_updated,
+                    "has_schedule": not bool(entry.is_excluded),
+                    "groups": list(entry.group_ids or []),
+                    "schedule": get_schedule_slots(response, entry),
                     "graph_updated": graph_updated,
                 }
 
@@ -231,7 +232,6 @@ async def get_statuses():
 
 def prepare_state(current, old_state):
     previous = old_state.get("addresses", old_state)
-
     new_addresses = {}
     changed_addresses = set()
 
@@ -268,15 +268,21 @@ def make_summary(addresses):
                 title = "🚨 <b>ПЛАНОВЕ ВІДКЛЮЧЕННЯ СВІТЛА</b>"
             else:
                 title = "🚨 <b>ВІДКЛЮЧЕННЯ СВІТЛА</b>"
-
         elif not info["has_schedule"]:
             title = "⚪ <b>ГРАФІК ВІД ДТЕК ВІДСУТНІЙ</b>"
-
         else:
             title = "🟢 <b>СВІТЛО Є</b>"
 
+        prefix = (
+            "просп."
+            if "Григоренка" in address
+            else "вул."
+        )
+
         parts.append(title)
-        parts.append(f"📍 Київ, вул. {escape(address)}")
+        parts.append(
+            f"📍 Київ, {prefix} {escape(address)}"
+        )
 
         if outage:
             if info["start_date"]:
@@ -312,32 +318,23 @@ def make_summary(addresses):
             for item in info["schedule"]:
                 parts.append(f"▫️ {escape(item)}")
 
-        if info["info_updated"]:
-            parts.append(
-                f"📅 Оновлено інформацію ДТЕК: "
-                f"{escape(str(info['info_updated']))}"
-            )
+        parts.extend(["", "━━━━━━━━━━━━━━", ""])
 
-        parts.append("")
-        parts.append("━━━━━━━━━━━━━━")
-        parts.append("")
+    while parts and parts[-1] == "":
+        parts.pop()
 
-    if parts:
-        while parts and parts[-1] == "":
-            parts.pop()
+    graph_updates = []
+
+    for info in addresses.values():
+        updated = format_time(info.get("graph_updated"))
+        if updated and updated not in graph_updates:
+            graph_updates.append(updated)
 
     parts.append("")
 
-    graph_updates = list(dict.fromkeys(
-        str(info["graph_updated"])
-        for info in addresses.values()
-        if info["graph_updated"]
-    ))
-
     if graph_updates:
         parts.append(
-            f"🕒 <b>Оновлено графік:</b> "
-            f"{escape(' / '.join(graph_updates))}"
+            f"🕒 <b>Оновлено графік о {escape(graph_updates[-1])}</b>"
         )
     else:
         parts.append(
@@ -348,8 +345,9 @@ def make_summary(addresses):
 
 
 async def main():
-    token = os.environ["BOT_TOKEN"]
-    bot = Bot(token=token)
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("Не знайдено BOT_TOKEN у Secrets.")
 
     old_state = load_state()
     current = await get_statuses()
@@ -359,33 +357,22 @@ async def main():
         old_state,
     )
 
-    first_run = not old_state
+    if not old_state or changed_addresses:
+        async with Bot(token=token) as bot:
+            message = await bot.send_message(
+                chat_id=CHANNEL,
+                text=make_summary(addresses),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
 
-    if first_run or changed_addresses:
-        message_text = make_summary(addresses)
-
-        message = await bot.send_message(
-            chat_id=CHANNEL,
-            text=message_text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-
-        print(
-            f"Нова загальна публікація створена. "
-            f"ID: {message.message_id}"
-        )
-
-        print("Змінені адреси:", changed_addresses)
-
+        print(f"Повідомлення створено. ID: {message.message_id}")
+        print("Змінені адреси:", sorted(changed_addresses))
     else:
         print("Змін немає. Повідомлення не надсилаємо.")
 
-    save_state({
-        "addresses": addresses,
-    })
-
-    print("Перевірені адреси:", current)
+    save_state({"addresses": addresses})
+    print("Перевірені адреси:", list(current.keys()))
 
 
 if __name__ == "__main__":
