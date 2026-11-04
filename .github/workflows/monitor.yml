@@ -1,4 +1,3 @@
-
 name: New DTEK Monitor
 
 on:
@@ -9,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: dtek-monitor
+  cancel-in-progress: false
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
@@ -16,6 +19,9 @@ jobs:
     steps:
       - name: Download project
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Install Python
         uses: actions/setup-python@v5
@@ -34,11 +40,12 @@ jobs:
         run: python main.py
 
       - name: Save status
+        if: success()
         run: |
-          if ! git diff --quiet -- state.json; then
-            git config user.name "svitlo-monitor"
-            git config user.email "actions@users.noreply.github.com"
-            git add state.json
+          git config user.name "svitlo-monitor"
+          git config user.email "actions@users.noreply.github.com"
+          git add state.json
+          if ! git diff --cached --quiet; then
             git commit -m "Update monitor state"
-            git push
+            git push origin HEAD:main
           fi
