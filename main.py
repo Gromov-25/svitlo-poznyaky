@@ -3,6 +3,9 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from html import escape
 
 from telegram import Bot
 from dtek_client import DtekClient
@@ -16,6 +19,7 @@ AJAX_URL = f"{BASE_URL}/ua/ajax"
 CITY = "м. Київ"
 CHANNEL = os.getenv("TELEGRAM_CHANNEL", "@Poznyaky_Svitlo24")
 STATE_FILE = Path("state.json")
+KYIV = ZoneInfo("Europe/Kyiv")
 
 ADDRESSES = {
     "Драгоманова, 42": ("Драгоманова", "42"),
@@ -25,13 +29,18 @@ ADDRESSES = {
 }
 
 
+def now_time():
+    return datetime.now(KYIV).strftime("%H:%M")
+
+
 def normalize_house(number):
     return str(number).strip().upper().replace(" ", "")
 
 
 def load_state():
     try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
@@ -127,17 +136,82 @@ async def get_statuses():
         await session.close()
 
 
-def make_message(address, outage):
-    if outage:
-        status = "🔴 ДТЕК ПОКАЗУЄ ВІДКЛЮЧЕННЯ"
-    else:
-        status = "🟢 ДТЕК НЕ ПОКАЗУЄ ВІДКЛЮЧЕННЯ"
+def prepare_state(current, old_state):
+    # Підтримуємо і старий, і новий формат state.json
+    previous = old_state.get("addresses", old_state)
 
-    return (
-        "⚡ <b>СВІТЛО | ПОЗНЯКИ 24/7</b>\n\n"
-        f"<b>{status}</b>\n"
-        f"📍 Київ, вул. {address}"
-    )
+    new_addresses = {}
+    changed_addresses = set()
+    current_time = now_time()
+
+    for address, outage in current.items():
+        old = previous.get(address)
+
+        if isinstance(old, bool):
+            old_outage = old
+            old_event_time = None
+        elif isinstance(old, dict):
+            old_outage = old.get("outage")
+            old_event_time = old.get("event_time")
+        else:
+            old_outage = None
+            old_event_time = None
+
+        changed = (
+            old_outage is not None
+            and old_outage != outage
+        )
+
+        if changed:
+            changed_addresses.add(address)
+            event_time = current_time
+        else:
+            event_time = old_event_time
+
+        new_addresses[address] = {
+            "outage": outage,
+            "event_time": event_time,
+        }
+
+    return new_addresses, changed_addresses
+
+
+def make_summary(addresses, changed_addresses):
+    parts = []
+
+    for address, info in addresses.items():
+        outage = info["outage"]
+        event_time = info["event_time"]
+
+        if outage:
+            title = "🚨 <b>ВІДКЛЮЧЕННЯ СВІТЛА</b>"
+        elif address in changed_addresses:
+            title = "🟢 <b>СВІТЛО ПОВЕРТАЄТЬСЯ</b>"
+        else:
+            title = "🟢 <b>СВІТЛО Є</b>"
+
+        parts.append(title)
+
+        if address in changed_addresses and event_time:
+            parts.append(f"О {event_time}")
+
+        parts.append(f"📍 Київ, вул. {escape(address)}")
+
+        if event_time and not address in changed_addresses:
+            parts.append(f"🕒 Остання зміна: {event_time}")
+
+        parts.append("")
+        parts.append("━━━━━━━━━━━━━━")
+        parts.append("")
+
+    if parts:
+        parts.pop()
+        parts.pop()
+
+    parts.append("")
+    parts.append("ℹ️ Очікуємо оновлення інформації від ДТЕК.")
+
+    return "\n".join(parts)
 
 
 async def main():
@@ -147,24 +221,49 @@ async def main():
     old_state = load_state()
     current = await get_statuses()
 
+    addresses, changed_addresses = prepare_state(
+        current,
+        old_state,
+    )
+
     first_run = not old_state
 
-    for address, outage in current.items():
-        if first_run or old_state.get(address) != outage:
-            await bot.send_message(
-                chat_id=CHANNEL,
-                text=make_message(address, outage),
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+    if first_run or changed_addresses:
+        message_text = make_summary(
+            addresses,
+            changed_addresses,
+        )
 
-    save_state(current)
-    print(f"Успішно перевірено адреси: {current}")
+        message = await bot.send_message(
+            chat_id=CHANNEL,
+            text=message_text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+        print(
+            f"Нова загальна публікація створена. "
+            f"ID: {message.message_id}"
+        )
+
+        print("Змінені адреси:", changed_addresses)
+
+    else:
+        print("Змін немає. Повідомлення не надсилаємо.")
+
+    save_state({
+        "addresses": addresses,
+    })
+
+    print("Перевірені адреси:", current)
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as error:
-        print(f"ПОМИЛКА МОНІТОРИНГУ: {type(error).__name__}: {error}")
+        print(
+            f"ПОМИЛКА МОНІТОРИНГУ: "
+            f"{type(error).__name__}: {error}"
+        )
         raise
