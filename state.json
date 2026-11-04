@@ -27,11 +27,11 @@
       "graph_updated": "02.11.2026 22:04"
     },
     "Урлівська, 36": {
-      "outage": true,
-      "reason": "Аварійні ремонтні роботи",
-      "outage_type": "2",
-      "start_date": "21:54 03.11.2026",
-      "end_date": "09:25 04.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -53,11 +53,11 @@
       "graph_updated": "02.11.2026 22:04"
     },
     "Петра Григоренка, 22/20": {
-      "outage": true,
-      "reason": "Аварійні ремонтні роботи",
-      "outage_type": "2",
-      "start_date": "21:54 03.11.2026",
-      "end_date": "09:25 04.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
