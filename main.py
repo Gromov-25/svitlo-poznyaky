@@ -3,8 +3,6 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from telegram import Bot
 from dtek_client import DtekClient
@@ -18,7 +16,6 @@ AJAX_URL = f"{BASE_URL}/ua/ajax"
 CITY = "м. Київ"
 CHANNEL = os.getenv("TELEGRAM_CHANNEL", "@Poznyaky_Svitlo24")
 STATE_FILE = Path("state.json")
-TZ = ZoneInfo("Europe/Kyiv")
 
 ADDRESSES = {
     "Драгоманова, 42": ("Драгоманова", "42"),
@@ -28,13 +25,7 @@ ADDRESSES = {
 
 
 def normalize_house(number):
-    return (
-        str(number)
-        .strip()
-        .upper()
-        .replace(" ", "")
-        .replace("А", "А")
-    )
+    return str(number).strip().upper().replace(" ", "")
 
 
 def load_state():
@@ -132,26 +123,16 @@ async def get_statuses():
         await session.close()
 
 
-def make_message(address, outage, initial=False):
-    now = datetime.now(TZ).strftime("%d.%m.%Y о %H:%M")
-
+def make_message(address, outage):
     if outage:
         status = "🔴 ДТЕК ПОКАЗУЄ ВІДКЛЮЧЕННЯ"
-        detail = "За даними ДТЕК, для адреси відображається відключення."
     else:
         status = "🟢 ДТЕК НЕ ПОКАЗУЄ ВІДКЛЮЧЕННЯ"
-        detail = "За даними ДТЕК, активне відключення не відображається."
-
-    event = "Початковий статус" if initial else "Зміна статусу"
 
     return (
         "⚡ <b>СВІТЛО | ПОЗНЯКИ 24/7</b>\n\n"
         f"<b>{status}</b>\n"
-        f"📍 Київ, вул. {address}\n\n"
-        f"{detail}\n"
-        f"🕒 {event}: {now}\n\n"
-        "<i>Джерело: ДТЕК Київські електромережі. "
-        "Це дані ДТЕК, а не вимірювання напруги у квартирі.</i>"
+        f"📍 Київ, вул. {address}"
     )
 
 
@@ -168,7 +149,7 @@ async def main():
         if first_run or old_state.get(address) != outage:
             await bot.send_message(
                 chat_id=CHANNEL,
-                text=make_message(address, outage, first_run),
+                text=make_message(address, outage),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
