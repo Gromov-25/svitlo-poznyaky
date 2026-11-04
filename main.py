@@ -1,11 +1,13 @@
 
+
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from html import escape
+from html import escape, unescape
 
 from telegram import Bot
 from dtek_client import DtekClient
@@ -50,30 +52,62 @@ def save_state(state):
     )
 
 
-def format_time(value):
+def format_dtek_datetime(value):
     if not value:
         return None
 
     if isinstance(value, datetime):
         if value.tzinfo:
             value = value.astimezone(KYIV)
-        return value.strftime("%H:%M")
+        return value.strftime("%d.%m.%Y %H:%M")
 
     if isinstance(value, (int, float)):
         try:
-            return datetime.fromtimestamp(value, KYIV).strftime("%H:%M")
+            parsed = datetime.fromtimestamp(value, KYIV)
+            return parsed.strftime("%d.%m.%Y %H:%M")
         except (ValueError, OSError):
             return None
 
     value = str(value).strip()
 
+    formats = (
+        "%H:%M %d.%m.%Y",
+        "%d.%m.%Y %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    )
+
+    for fmt in formats:
+        try:
+            parsed = datetime.strptime(value, fmt)
+            return parsed.strftime("%d.%m.%Y %H:%M")
+        except ValueError:
+            pass
+
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if parsed.tzinfo:
             parsed = parsed.astimezone(KYIV)
-        return parsed.strftime("%H:%M")
+        return parsed.strftime("%d.%m.%Y %H:%M")
     except ValueError:
         return value
+
+
+def get_page_update_time(page_html):
+    text = unescape(re.sub(r"<[^>]+>", " ", page_html))
+    text = re.sub(r"\s+", " ", text)
+
+    match = re.search(
+        r"Дата\s+оновлення\s+інформації\s*[–—-]\s*"
+        r"(\d{2}:\d{2}\s+\d{2}\.\d{2}\.\d{4})",
+        text,
+        re.IGNORECASE,
+    )
+
+    if match:
+        return match.group(1)
+
+    return None
 
 
 def get_schedule_slots(response, entry):
@@ -103,7 +137,8 @@ def get_schedule_slots(response, entry):
 
         for slot_id, status in sorted(
             slots.items(),
-            key=lambda item: int(item[0]) if str(item[0]).isdigit() else 999,
+            key=lambda item: int(item[0])
+            if str(item[0]).isdigit() else 999,
         ):
             value = getattr(status, "value", str(status))
 
@@ -157,6 +192,14 @@ async def get_statuses():
     )
 
     try:
+        # Час оновлення інформації про поточні відключення
+        page_response = await session.get(SCHEDULE_URL)
+
+        if page_response.status_code == 200:
+            page_update = get_page_update_time(page_response.text)
+        else:
+            page_update = None
+
         async with DtekClient(
             "kem",
             ajax_url=AJAX_URL,
@@ -209,6 +252,7 @@ async def get_statuses():
                     )
 
                 graph_updated = None
+
                 if response.fact:
                     graph_updated = response.fact.update
 
@@ -224,7 +268,7 @@ async def get_statuses():
                     "graph_updated": graph_updated,
                 }
 
-            return results
+            return results, page_update
 
     finally:
         await session.close()
@@ -253,7 +297,7 @@ def prepare_state(current, old_state):
     return new_addresses, changed_addresses
 
 
-def make_summary(addresses):
+def make_summary(addresses, page_update):
     parts = []
 
     for address, info in addresses.items():
@@ -280,9 +324,7 @@ def make_summary(addresses):
         )
 
         parts.append(title)
-        parts.append(
-            f"📍 Київ, {prefix} {escape(address)}"
-        )
+        parts.append(f"📍 Київ, {prefix} {escape(address)}")
 
         if outage:
             if info["start_date"]:
@@ -326,19 +368,35 @@ def make_summary(addresses):
     graph_updates = []
 
     for info in addresses.values():
-        updated = format_time(info.get("graph_updated"))
+        updated = format_dtek_datetime(
+            info.get("graph_updated")
+        )
+
         if updated and updated not in graph_updates:
             graph_updates.append(updated)
 
     parts.append("")
 
-    if graph_updates:
+    if page_update:
         parts.append(
-            f"🕒 <b>Оновлено графік о {escape(graph_updates[-1])}</b>"
+            f"🕒 <b>Остання перевірка ДТЕК: "
+            f"{escape(page_update)}</b>"
         )
     else:
         parts.append(
-            "🕒 ДТЕК не передав час оновлення графіка."
+            "🕒 <b>Час оновлення інформації ДТЕК: "
+            "не вдалося отримати</b>"
+        )
+
+    if graph_updates:
+        parts.append(
+            f"📅 <b>Графік ГПВ востаннє оновлено: "
+            f"{escape(graph_updates[-1])}</b>"
+        )
+    else:
+        parts.append(
+            "📅 <b>Час оновлення графіка ГПВ: "
+            "не вдалося отримати</b>"
         )
 
     return "\n".join(parts)
@@ -346,11 +404,13 @@ def make_summary(addresses):
 
 async def main():
     token = os.environ.get("BOT_TOKEN")
+
     if not token:
         raise RuntimeError("Не знайдено BOT_TOKEN у Secrets.")
 
     old_state = load_state()
-    current = await get_statuses()
+
+    current, page_update = await get_statuses()
 
     addresses, changed_addresses = prepare_state(
         current,
@@ -361,7 +421,7 @@ async def main():
         async with Bot(token=token) as bot:
             message = await bot.send_message(
                 chat_id=CHANNEL,
-                text=make_summary(addresses),
+                text=make_summary(addresses, page_update),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -372,7 +432,9 @@ async def main():
         print("Змін немає. Повідомлення не надсилаємо.")
 
     save_state({"addresses": addresses})
+
     print("Перевірені адреси:", list(current.keys()))
+    print("Оновлення інформації ДТЕК:", page_update)
 
 
 if __name__ == "__main__":
