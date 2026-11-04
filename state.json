@@ -2,19 +2,59 @@
   "addresses": {
     "Драгоманова, 42": {
       "outage": false,
-      "event_time": null
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
+      "has_schedule": true,
+      "groups": [
+        "GPV48.1"
+      ],
+      "schedule": [],
+      "info_updated": "08:21 04.11.2026",
+      "graph_updated": "02.11.2026 22:04"
     },
     "Драгоманова, 42А": {
       "outage": false,
-      "event_time": null
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
+      "has_schedule": true,
+      "groups": [
+        "GPV48.1"
+      ],
+      "schedule": [],
+      "info_updated": "08:21 04.11.2026",
+      "graph_updated": "02.11.2026 22:04"
     },
     "Урлівська, 36": {
       "outage": true,
-      "event_time": "08:28"
+      "reason": "Аварійні ремонтні роботи",
+      "outage_type": "2",
+      "start_date": "21:54 03.11.2026",
+      "end_date": "09:25 04.11.2026",
+      "has_schedule": true,
+      "groups": [
+        "GPV46.1"
+      ],
+      "schedule": [],
+      "info_updated": "08:21 04.11.2026",
+      "graph_updated": "02.11.2026 22:04"
     },
     "Петра Григоренка, 21": {
       "outage": true,
-      "event_time": "08:28"
+      "reason": "Екстренні відключення (Аварійне без застосування графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "14:42 03.11.2026",
+      "end_date": "09:45 04.11.2026",
+      "has_schedule": true,
+      "groups": [
+        "GPV45.1"
+      ],
+      "schedule": [],
+      "info_updated": "08:21 04.11.2026",
+      "graph_updated": "02.11.2026 22:04"
     }
   }
 }
