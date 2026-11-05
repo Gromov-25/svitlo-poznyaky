@@ -63,11 +63,11 @@
       "graph_updated": "04.11.2026 21:42"
     },
     "Урлівська, 36": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "03:03 05.11.2026",
+      "end_date": "10:00 05.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -125,11 +125,11 @@
       "graph_updated": "04.11.2026 21:42"
     },
     "Петра Григоренка, 22/20": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "03:03 05.11.2026",
+      "end_date": "10:00 05.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
