@@ -93,11 +93,11 @@
       "graph_updated": "04.11.2026 21:42"
     },
     "Петра Григоренка, 21": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "02:31 05.11.2026",
+      "end_date": "09:00 05.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV45.1"
