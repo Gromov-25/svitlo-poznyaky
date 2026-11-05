@@ -1,5 +1,3 @@
-
-
 import asyncio
 import json
 import os
@@ -30,11 +28,18 @@ ADDRESSES = {
     "Урлівська, 36": ("Урлівська", "36"),
     "Петра Григоренка, 21": ("Петра Григоренка", "21"),
     "Петра Григоренка, 22/20": ("Петра Григоренка", "22/20"),
+    "Анни Ахматової, 14Б": ("Анни Ахматової", "14/Б"),
 }
 
 
 def normalize_house(number):
-    return str(number).strip().upper().replace(" ", "")
+    return (
+        str(number)
+        .strip()
+        .upper()
+        .replace(" ", "")
+        .replace("/", "")
+    )
 
 
 def load_state():
@@ -104,64 +109,7 @@ def get_page_update_time(page_html):
         re.IGNORECASE,
     )
 
-    if match:
-        return match.group(1)
-
-    return None
-
-
-def get_schedule_slots(response, entry):
-    if not entry.group_ids:
-        return []
-
-    result = []
-    fact = response.fact
-    preset = response.preset
-    time_zone = getattr(preset, "time_zone", None) or {}
-
-    for group_id in entry.group_ids:
-        slots = None
-
-        if fact:
-            slots = fact.get_group_today(group_id)
-
-        if slots is None and preset:
-            group = preset.groups.get(group_id)
-            if group:
-                day = group.get_day(datetime.now(KYIV).isoweekday())
-                if day:
-                    slots = day.slots
-
-        if not slots:
-            continue
-
-        for slot_id, status in sorted(
-            slots.items(),
-            key=lambda item: int(item[0])
-            if str(item[0]).isdigit() else 999,
-        ):
-            value = getattr(status, "value", str(status))
-
-            if value not in {
-                "no", "first", "second",
-                "maybe", "mfirst", "msecond",
-            }:
-                continue
-
-            label = time_zone.get(slot_id)
-
-            if isinstance(label, list):
-                label = label[0] if label else None
-
-            if label:
-                prefix = (
-                    "Можливе відключення"
-                    if value in {"maybe", "mfirst", "msecond"}
-                    else "Відключення"
-                )
-                result.append(f"{prefix}: {label}")
-
-    return list(dict.fromkeys(result))
+    return match.group(1) if match else None
 
 
 async def get_statuses():
@@ -192,7 +140,6 @@ async def get_statuses():
     )
 
     try:
-        # Час оновлення інформації про поточні відключення
         page_response = await session.get(SCHEDULE_URL)
 
         if page_response.status_code == 200:
@@ -215,10 +162,15 @@ async def get_statuses():
 
                 if "драгоманова" in lowered:
                     found_streets["Драгоманова"] = name
+
                 elif "урлівська" in lowered or "урловская" in lowered:
                     found_streets["Урлівська"] = name
+
                 elif "григоренка" in lowered:
                     found_streets["Петра Григоренка"] = name
+
+                elif "ахматов" in lowered:
+                    found_streets["Анни Ахматової"] = name
 
             results = {}
             street_cache = {}
@@ -264,7 +216,6 @@ async def get_statuses():
                     "end_date": str(entry.end_date or ""),
                     "has_schedule": not bool(entry.is_excluded),
                     "groups": list(entry.group_ids or []),
-                    "schedule": get_schedule_slots(response, entry),
                     "graph_updated": graph_updated,
                 }
 
@@ -303,17 +254,11 @@ def make_summary(addresses, page_update):
     for address, info in addresses.items():
         outage = info["outage"]
         reason = info["reason"]
-        outage_type = info["outage_type"]
 
-        if outage:
-            if "авар" in reason.casefold():
-                title = "🚨 <b>АВАРІЙНЕ ВІДКЛЮЧЕННЯ СВІТЛА</b>"
-            elif outage_type == "1":
-                title = "🚨 <b>ПЛАНОВЕ ВІДКЛЮЧЕННЯ СВІТЛА</b>"
-            else:
-                title = "🚨 <b>ВІДКЛЮЧЕННЯ СВІТЛА</b>"
-        elif not info["has_schedule"]:
-            title = "⚪ <b>ГРАФІК ВІД ДТЕК ВІДСУТНІЙ</b>"
+        if outage and "авар" in reason.casefold():
+            title = "🚨 <b>АВАРІЙНЕ ВІДКЛЮЧЕННЯ</b>"
+        elif outage:
+            title = "🔴 <b>СВІТЛА НЕМАЄ</b>"
         else:
             title = "🟢 <b>СВІТЛО Є</b>"
 
@@ -343,22 +288,10 @@ def make_summary(addresses, page_update):
                     f"{escape(info['end_date'])}"
                 )
 
-        elif not info["has_schedule"]:
-            parts.append(
-                "ℹ️ ДТЕК не надав графік для цієї адреси."
-            )
-
         if info["groups"]:
             parts.append(
                 f"📊 Черга: {escape(', '.join(info['groups']))}"
             )
-
-        if info["schedule"]:
-            parts.append("")
-            parts.append("<b>Графік відключень на сьогодні:</b>")
-
-            for item in info["schedule"]:
-                parts.append(f"▫️ {escape(item)}")
 
         parts.extend(["", "━━━━━━━━━━━━━━", ""])
 
