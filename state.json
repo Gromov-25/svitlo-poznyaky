@@ -61,11 +61,11 @@
       "graph_updated": "07.11.2026 00:41"
     },
     "Анни Ахматової, 14Б": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "21:35 06.11.2026",
-      "end_date": "03:30 07.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV47.1"
