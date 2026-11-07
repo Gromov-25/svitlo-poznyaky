@@ -1,11 +1,11 @@
 {
   "addresses": {
     "Драгоманова, 42": {
-      "outage": true,
-      "reason": "Аварійні ремонтні роботи",
-      "outage_type": "2",
-      "start_date": "13:10 07.11.2026",
-      "end_date": "19:20 07.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
@@ -13,11 +13,11 @@
       "graph_updated": "07.11.2026 13:33"
     },
     "Драгоманова, 42А": {
-      "outage": true,
-      "reason": "Аварійні ремонтні роботи",
-      "outage_type": "2",
-      "start_date": "13:10 07.11.2026",
-      "end_date": "19:20 07.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
@@ -28,8 +28,8 @@
       "outage": true,
       "reason": "Аварійні ремонтні роботи",
       "outage_type": "2",
-      "start_date": "14:51 07.11.2026",
-      "end_date": "18:51 07.11.2026",
+      "start_date": "16:08 07.11.2026",
+      "end_date": "20:29 07.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -52,8 +52,8 @@
       "outage": true,
       "reason": "Аварійні ремонтні роботи",
       "outage_type": "2",
-      "start_date": "14:51 07.11.2026",
-      "end_date": "18:51 07.11.2026",
+      "start_date": "16:08 07.11.2026",
+      "end_date": "20:29 07.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -61,11 +61,11 @@
       "graph_updated": "07.11.2026 13:33"
     },
     "Анни Ахматової, 14Б": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Аварійні ремонтні роботи",
+      "outage_type": "2",
+      "start_date": "16:08 07.11.2026",
+      "end_date": "20:29 07.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV47.1"
