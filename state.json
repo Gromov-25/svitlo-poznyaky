@@ -29,7 +29,7 @@
       "reason": "Аварійні ремонтні роботи",
       "outage_type": "2",
       "start_date": "15:59 08.11.2026",
-      "end_date": "23:45 08.11.2026",
+      "end_date": "03:30 09.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -52,8 +52,8 @@
       "outage": true,
       "reason": "Аварійні ремонтні роботи",
       "outage_type": "2",
-      "start_date": "17:24 08.11.2026",
-      "end_date": "01:10 09.11.2026",
+      "start_date": "15:59 08.11.2026",
+      "end_date": "03:30 09.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
