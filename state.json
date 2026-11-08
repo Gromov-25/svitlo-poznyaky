@@ -25,11 +25,11 @@
       "graph_updated": "08.11.2026 00:49"
     },
     "Урлівська, 36": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Аварійні ремонтні роботи",
+      "outage_type": "2",
+      "start_date": "09:11 08.11.2026",
+      "end_date": "13:11 08.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
