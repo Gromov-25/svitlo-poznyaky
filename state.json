@@ -1,11 +1,11 @@
 {
   "addresses": {
     "Драгоманова, 42": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "19:16 10.11.2026",
+      "end_date": "00:00 11.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
@@ -13,11 +13,11 @@
       "graph_updated": "10.11.2026 10:27"
     },
     "Драгоманова, 42А": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
+      "outage_type": "2",
+      "start_date": "19:16 10.11.2026",
+      "end_date": "00:00 11.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
