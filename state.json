@@ -1,11 +1,11 @@
 {
   "addresses": {
     "Драгоманова, 42": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "10:19 14.11.2026",
-      "end_date": "16:00 14.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
@@ -13,11 +13,11 @@
       "graph_updated": "13.11.2026 21:47"
     },
     "Драгоманова, 42А": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "10:19 14.11.2026",
-      "end_date": "16:00 14.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
@@ -37,11 +37,11 @@
       "graph_updated": "13.11.2026 21:47"
     },
     "Петра Григоренка, 21": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "10:18 14.11.2026",
-      "end_date": "16:00 14.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
