@@ -1,9 +1,10 @@
+
 import asyncio
 import json
 import os
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from html import escape, unescape
 
@@ -23,6 +24,7 @@ STATE_FILE = Path("state.json")
 KYIV = ZoneInfo("Europe/Kyiv")
 
 ADDRESSES = {
+    "Драгоманова, 25": ("Драгоманова", "25"),
     "Драгоманова, 42": ("Драгоманова", "42"),
     "Драгоманова, 42А": ("Драгоманова", "42/А"),
     "Урлівська, 36": ("Урлівська", "36"),
@@ -110,6 +112,134 @@ def get_page_update_time(page_html):
     )
 
     return match.group(1) if match else None
+
+
+def slot_start_minutes(slot_key, time_zone):
+    label = time_zone.get(str(slot_key), "") if time_zone else ""
+    match = re.search(r"(\d{1,2}):(\d{2})", str(label))
+
+    if match:
+        return int(match.group(1)) * 60 + int(match.group(2))
+
+    try:
+        number = int(slot_key)
+        if 1 <= number <= 48:
+            return (number - 1) * 30
+    except (TypeError, ValueError):
+        pass
+
+    return None
+
+
+def get_slot_outage_interval(slot_key, status, time_zone):
+    value = getattr(status, "value", status)
+    value = str(value).strip().lower()
+    start = slot_start_minutes(slot_key, time_zone)
+
+    if start is None:
+        return None
+
+    if value in ("no", "maybe"):
+        return start, start + 30, value == "maybe"
+
+    if value in ("first", "mfirst"):
+        return start, start + 15, value == "mfirst"
+
+    if value in ("second", "msecond"):
+        return start + 15, start + 30, value == "msecond"
+
+    return None
+
+
+def find_next_outage(response, group_ids):
+    preset = getattr(response, "preset", None)
+
+    if not preset or not getattr(preset, "is_active", False):
+        return None
+
+    groups = getattr(preset, "groups", {}) or {}
+    time_zone = getattr(preset, "time_zone", {}) or {}
+
+    if not groups or not time_zone:
+        return None
+
+    now = datetime.now(KYIV)
+    candidates = []
+
+    for day_offset in range(8):
+        day = (now + timedelta(days=day_offset)).date()
+        weekday = day.isoweekday()
+
+        for group_id in group_ids:
+            group = groups.get(str(group_id))
+
+            if not group:
+                continue
+
+            day_schedule = (
+                getattr(group, "days", {}) or {}
+            ).get(weekday)
+
+            if not day_schedule:
+                continue
+
+            slots = getattr(day_schedule, "slots", {}) or {}
+            intervals = []
+
+            for slot_key, status in slots.items():
+                interval = get_slot_outage_interval(
+                    slot_key,
+                    status,
+                    time_zone,
+                )
+
+                if interval:
+                    intervals.append(interval)
+
+            intervals.sort(key=lambda item: item[0])
+
+            for start_minute, end_minute, possible in intervals:
+                start_dt = datetime(
+                    day.year, day.month, day.day,
+                    start_minute // 60, start_minute % 60,
+                    tzinfo=KYIV,
+                )
+
+                end_dt = datetime(
+                    day.year, day.month, day.day,
+                    end_minute // 60, end_minute % 60,
+                    tzinfo=KYIV,
+                )
+
+                if end_dt <= now or start_dt < now:
+                    continue
+
+                candidates.append((start_dt, end_dt, possible))
+
+    if not candidates:
+        return None
+
+    start_dt, end_dt, possible = min(
+        candidates,
+        key=lambda item: item[0],
+    )
+
+    if start_dt.date() == now.date():
+        day_label = "сьогодні"
+    elif start_dt.date() == (now + timedelta(days=1)).date():
+        day_label = "завтра"
+    else:
+        day_label = start_dt.strftime("%d.%m")
+
+    result = (
+        f"{day_label} "
+        f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+    )
+
+    if possible:
+        result += " (можливе)"
+
+    return result
 
 
 async def get_statuses():
@@ -208,6 +338,14 @@ async def get_statuses():
                 if response.fact:
                     graph_updated = response.fact.update
 
+                groups = list(entry.group_ids or [])
+
+                next_outage = (
+                    find_next_outage(response, groups)
+                    if not entry.has_current_outage and groups
+                    else None
+                )
+
                 results[address] = {
                     "outage": bool(entry.has_current_outage),
                     "reason": str(entry.sub_type or "").strip(),
@@ -215,7 +353,8 @@ async def get_statuses():
                     "start_date": str(entry.start_date or ""),
                     "end_date": str(entry.end_date or ""),
                     "has_schedule": not bool(entry.is_excluded),
-                    "groups": list(entry.group_ids or []),
+                    "groups": groups,
+                    "next_outage": next_outage,
                     "graph_updated": graph_updated,
                 }
 
@@ -287,6 +426,18 @@ def make_summary(addresses, page_update):
                     f"🟢 Орієнтовне відновлення: "
                     f"{escape(info['end_date'])}"
                 )
+        else:
+            if not info.get("has_schedule", True):
+                next_outage_text = "Немає даних"
+            elif info.get("next_outage"):
+                next_outage_text = info["next_outage"]
+            else:
+                next_outage_text = "Планових відключень не прогнозується"
+
+            parts.append(
+                f"🕒 Орієнтовне відключення: "
+                f"{escape(next_outage_text)}"
+            )
 
         if info["groups"]:
             parts.append(
