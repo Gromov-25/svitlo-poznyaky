@@ -4,7 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 from html import escape, unescape
 
@@ -36,11 +36,8 @@ ADDRESSES = {
 
 def normalize_house(number):
     return (
-        str(number)
-        .strip()
-        .upper()
-        .replace(" ", "")
-        .replace("/", "")
+        str(number).strip().upper()
+        .replace(" ", "").replace("/", "")
     )
 
 
@@ -70,8 +67,9 @@ def format_dtek_datetime(value):
 
     if isinstance(value, (int, float)):
         try:
-            parsed = datetime.fromtimestamp(value, KYIV)
-            return parsed.strftime("%d.%m.%Y %H:%M")
+            return datetime.fromtimestamp(
+                value, KYIV
+            ).strftime("%d.%m.%Y %H:%M")
         except (ValueError, OSError):
             return None
 
@@ -86,13 +84,16 @@ def format_dtek_datetime(value):
 
     for fmt in formats:
         try:
-            parsed = datetime.strptime(value, fmt)
-            return parsed.strftime("%d.%m.%Y %H:%M")
+            return datetime.strptime(
+                value, fmt
+            ).strftime("%d.%m.%Y %H:%M")
         except ValueError:
             pass
 
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
         if parsed.tzinfo:
             parsed = parsed.astimezone(KYIV)
         return parsed.strftime("%d.%m.%Y %H:%M")
@@ -115,16 +116,20 @@ def get_page_update_time(page_html):
 
 
 def slot_start_minutes(slot_key, time_zone):
-    label = time_zone.get(str(slot_key), "") if time_zone else ""
+    label = (time_zone or {}).get(str(slot_key), "")
     match = re.search(r"(\d{1,2}):(\d{2})", str(label))
 
     if match:
-        return int(match.group(1)) * 60 + int(match.group(2))
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        if hour < 24 and minute < 60:
+            return hour * 60 + minute
 
+    # DTEK schedule slots are hourly indices (0–23).
     try:
         number = int(slot_key)
-        if 1 <= number <= 48:
-            return (number - 1) * 30
+        if 0 <= number <= 23:
+            return number * 60
     except (TypeError, ValueError):
         pass
 
@@ -134,116 +139,195 @@ def slot_start_minutes(slot_key, time_zone):
 def get_slot_outage_interval(slot_key, status, time_zone):
     value = getattr(status, "value", status)
     value = str(value).strip().lower()
+
     start = slot_start_minutes(slot_key, time_zone)
 
     if start is None:
         return None
 
-    if value in ("no", "maybe"):
-        return start, start + 30, value == "maybe"
+    # DTEK encodes each schedule slot as one hour.
+    # NO = full hour, FIRST = first half,
+    # SECOND = second half.
+    if value in ("no",):
+        return start, start + 60, False
 
-    if value in ("first", "mfirst"):
-        return start, start + 15, value == "mfirst"
+    if value in ("maybe", "?"):
+        return start, start + 60, True
 
-    if value in ("second", "msecond"):
-        return start + 15, start + 30, value == "msecond"
+    if value in ("first",):
+        return start, start + 30, False
+
+    if value in ("mfirst",):
+        return start, start + 30, True
+
+    if value in ("second",):
+        return start + 30, start + 60, False
+
+    if value in ("msecond",):
+        return start + 30, start + 60, True
 
     return None
 
 
-def find_next_outage(response, group_ids):
+def get_fact_day(fact, group_id, day):
+    if not fact:
+        return None
+
+    method = getattr(fact, "get_group_for_date", None)
+
+    if callable(method):
+        try:
+            return method(day, group_id)
+        except Exception:
+            pass
+
+    return None
+
+
+def get_day_slots(response, group_id, day):
+    # First priority: confirmed DTEK fact schedule.
+    fact = getattr(response, "fact", None)
+    fact_day = get_fact_day(fact, group_id, day)
+
+    if fact_day is not None:
+        slots = getattr(fact_day, "slots", None)
+        if slots:
+            return slots, True
+
+    # Second priority: published weekly preset.
     preset = getattr(response, "preset", None)
 
     if not preset or not getattr(preset, "is_active", False):
-        return None
+        return None, False
 
     groups = getattr(preset, "groups", {}) or {}
-    time_zone = getattr(preset, "time_zone", {}) or {}
+    group = groups.get(str(group_id))
 
-    if not groups or not time_zone:
-        return None
+    if not group:
+        return None, False
 
+    days = getattr(group, "days", {}) or {}
+    day_schedule = (
+        days.get(day.isoweekday())
+        or days.get(str(day.isoweekday()))
+    )
+
+    if not day_schedule:
+        return None, False
+
+    slots = getattr(day_schedule, "slots", {}) or {}
+
+    if not slots:
+        return None, False
+
+    return slots, True
+
+
+def find_next_outage(response, group_ids):
     now = datetime.now(KYIV)
     candidates = []
+    schedule_found = False
+
+    preset = getattr(response, "preset", None)
+    time_zone = (
+        getattr(preset, "time_zone", {}) or {}
+        if preset else {}
+    )
+
+    fact = getattr(response, "fact", None)
+    fact_time_zone = getattr(fact, "time_zone", None)
+
+    if fact_time_zone:
+        time_zone = fact_time_zone
 
     for day_offset in range(8):
         day = (now + timedelta(days=day_offset)).date()
-        weekday = day.isoweekday()
 
         for group_id in group_ids:
-            group = groups.get(str(group_id))
+            slots, available = get_day_slots(
+                response, group_id, day
+            )
 
-            if not group:
+            if not available:
                 continue
 
-            day_schedule = (
-                getattr(group, "days", {}) or {}
-            ).get(weekday)
-
-            if not day_schedule:
-                continue
-
-            slots = getattr(day_schedule, "slots", {}) or {}
-            intervals = []
+            schedule_found = True
 
             for slot_key, status in slots.items():
                 interval = get_slot_outage_interval(
-                    slot_key,
-                    status,
-                    time_zone,
+                    slot_key, status, time_zone
                 )
 
-                if interval:
-                    intervals.append(interval)
+                if not interval:
+                    continue
 
-            intervals.sort(key=lambda item: item[0])
+                start_minute, end_minute, possible = interval
 
-            for start_minute, end_minute, possible in intervals:
                 start_dt = datetime(
                     day.year, day.month, day.day,
-                    start_minute // 60, start_minute % 60,
+                    start_minute // 60,
+                    start_minute % 60,
                     tzinfo=KYIV,
                 )
 
                 end_dt = datetime(
                     day.year, day.month, day.day,
-                    end_minute // 60, end_minute % 60,
+                    end_minute // 60,
+                    end_minute % 60,
                     tzinfo=KYIV,
                 )
 
-                if end_dt <= now or start_dt < now:
+                if end_dt <= now:
                     continue
 
-                candidates.append((start_dt, end_dt, possible))
+                # Do not show an outage which has already started.
+                if start_dt < now:
+                    continue
+
+                candidates.append(
+                    (start_dt, end_dt, possible)
+                )
 
     if not candidates:
-        return None
+        return None, schedule_found
 
-    start_dt, end_dt, possible = min(
-        candidates,
-        key=lambda item: item[0],
-    )
+    candidates.sort(key=lambda item: item[0])
 
-    if start_dt.date() == now.date():
+    # Join consecutive outage intervals into one period.
+    first_start, first_end, first_possible = candidates[0]
+    final_end = first_end
+    any_possible = first_possible
+
+    for start_dt, end_dt, possible in candidates[1:]:
+        if start_dt == final_end:
+            final_end = end_dt
+            any_possible = any_possible or possible
+        else:
+            break
+
+    if first_start.date() == now.date():
         day_label = "сьогодні"
-    elif start_dt.date() == (now + timedelta(days=1)).date():
+    elif first_start.date() == (now + timedelta(days=1)).date():
         day_label = "завтра"
     else:
-        day_label = start_dt.strftime("%d.%m")
+        day_label = first_start.strftime("%d.%m")
 
     result = (
         f"{day_label} "
-        f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        f"{first_start.strftime('%H:%M')}–"
+        f"{final_end.strftime('%H:%M')}"
     )
 
-    if possible:
+    if any_possible:
         result += " (можливе)"
 
-    return result
+    return result, schedule_found
 
 
 async def get_statuses():
-    cookies, csrf_token = await get_cleared_cookies(SCHEDULE_URL)
+    cookies, csrf_token = await get_cleared_cookies(
+        SCHEDULE_URL
+    )
 
     headers = {
         "User-Agent": (
@@ -272,10 +356,11 @@ async def get_statuses():
     try:
         page_response = await session.get(SCHEDULE_URL)
 
-        if page_response.status_code == 200:
-            page_update = get_page_update_time(page_response.text)
-        else:
-            page_update = None
+        page_update = (
+            get_page_update_time(page_response.text)
+            if page_response.status_code == 200
+            else None
+        )
 
         async with DtekClient(
             "kem",
@@ -292,13 +377,10 @@ async def get_statuses():
 
                 if "драгоманова" in lowered:
                     found_streets["Драгоманова"] = name
-
                 elif "урлівська" in lowered or "урловская" in lowered:
                     found_streets["Урлівська"] = name
-
                 elif "григоренка" in lowered:
                     found_streets["Петра Григоренка"] = name
-
                 elif "ахматов" in lowered:
                     found_streets["Анни Ахматової"] = name
 
@@ -314,9 +396,10 @@ async def get_statuses():
                     )
 
                 if street_name not in street_cache:
-                    street_cache[street_name] = await client.get_home_num(
-                        CITY,
-                        street_name,
+                    street_cache[street_name] = (
+                        await client.get_home_num(
+                            CITY, street_name
+                        )
                     )
 
                 response = street_cache[street_name]
@@ -333,26 +416,44 @@ async def get_statuses():
                         f"ДТЕК не повернув будинок {address}"
                     )
 
+                groups = list(entry.group_ids or [])
+
+                next_outage, schedule_found = (
+                    find_next_outage(response, groups)
+                    if groups and not entry.is_excluded
+                    else (None, False)
+                )
+
                 graph_updated = None
 
                 if response.fact:
-                    graph_updated = response.fact.update
+                    graph_updated = getattr(
+                        response.fact, "update", None
+                    )
 
-                groups = list(entry.group_ids or [])
-
-                next_outage = (
-                    find_next_outage(response, groups)
-                    if not entry.has_current_outage and groups
-                    else None
-                )
+                if not graph_updated and response.preset:
+                    graph_updated = getattr(
+                        response.preset, "update", None
+                    )
 
                 results[address] = {
                     "outage": bool(entry.has_current_outage),
-                    "reason": str(entry.sub_type or "").strip(),
-                    "outage_type": str(entry.outage_type or "").strip(),
-                    "start_date": str(entry.start_date or ""),
-                    "end_date": str(entry.end_date or ""),
-                    "has_schedule": not bool(entry.is_excluded),
+                    "reason": str(
+                        entry.sub_type or ""
+                    ).strip(),
+                    "outage_type": str(
+                        entry.outage_type or ""
+                    ).strip(),
+                    "start_date": str(
+                        entry.start_date or ""
+                    ),
+                    "end_date": str(
+                        entry.end_date or ""
+                    ),
+                    "has_schedule": (
+                        not bool(entry.is_excluded)
+                        and schedule_found
+                    ),
                     "groups": groups,
                     "next_outage": next_outage,
                     "graph_updated": graph_updated,
@@ -408,12 +509,15 @@ def make_summary(addresses, page_update):
         )
 
         parts.append(title)
-        parts.append(f"📍 Київ, {prefix} {escape(address)}")
+        parts.append(
+            f"📍 Київ, {prefix} {escape(address)}"
+        )
 
         if outage:
             if info["start_date"]:
                 parts.append(
-                    f"🕒 Початок: {escape(info['start_date'])}"
+                    f"🕒 Початок: "
+                    f"{escape(info['start_date'])}"
                 )
 
             if reason:
@@ -427,12 +531,14 @@ def make_summary(addresses, page_update):
                     f"{escape(info['end_date'])}"
                 )
         else:
-            if not info.get("has_schedule", True):
-                next_outage_text = "Немає даних"
-            elif info.get("next_outage"):
+            if not info["has_schedule"]:
+                next_outage_text = "Немає актуальних даних графіка"
+            elif info["next_outage"]:
                 next_outage_text = info["next_outage"]
             else:
-                next_outage_text = "Планових відключень не прогнозується"
+                next_outage_text = (
+                    "Планових відключень не прогнозується"
+                )
 
             parts.append(
                 f"🕒 Орієнтовне відключення: "
@@ -441,23 +547,14 @@ def make_summary(addresses, page_update):
 
         if info["groups"]:
             parts.append(
-                f"📊 Черга: {escape(', '.join(info['groups']))}"
+                f"📊 Черга: "
+                f"{escape(', '.join(info['groups']))}"
             )
 
         parts.extend(["", "━━━━━━━━━━━━━━", ""])
 
     while parts and parts[-1] == "":
         parts.pop()
-
-    graph_updates = []
-
-    for info in addresses.values():
-        updated = format_dtek_datetime(
-            info.get("graph_updated")
-        )
-
-        if updated and updated not in graph_updates:
-            graph_updates.append(updated)
 
     parts.append("")
 
@@ -471,6 +568,16 @@ def make_summary(addresses, page_update):
             "🕒 <b>Час оновлення інформації ДТЕК: "
             "не вдалося отримати</b>"
         )
+
+    graph_updates = []
+
+    for info in addresses.values():
+        updated = format_dtek_datetime(
+            info.get("graph_updated")
+        )
+
+        if updated and updated not in graph_updates:
+            graph_updates.append(updated)
 
     if graph_updates:
         parts.append(
@@ -490,15 +597,16 @@ async def main():
     token = os.environ.get("BOT_TOKEN")
 
     if not token:
-        raise RuntimeError("Не знайдено BOT_TOKEN у Secrets.")
+        raise RuntimeError(
+            "Не знайдено BOT_TOKEN у Secrets."
+        )
 
     old_state = load_state()
 
     current, page_update = await get_statuses()
 
     addresses, changed_addresses = prepare_state(
-        current,
-        old_state,
+        current, old_state
     )
 
     if not old_state or changed_addresses:
@@ -510,15 +618,37 @@ async def main():
                 disable_web_page_preview=True,
             )
 
-        print(f"Повідомлення створено. ID: {message.message_id}")
-        print("Змінені адреси:", sorted(changed_addresses))
+        print(
+            f"Повідомлення створено. ID: "
+            f"{message.message_id}"
+        )
+        print(
+            "Змінені адреси:",
+            sorted(changed_addresses)
+        )
     else:
-        print("Змін немає. Повідомлення не надсилаємо.")
+        print(
+            "Змін немає. Повідомлення не надсилаємо."
+        )
 
     save_state({"addresses": addresses})
 
-    print("Перевірені адреси:", list(current.keys()))
-    print("Оновлення інформації ДТЕК:", page_update)
+    print(
+        "Перевірені адреси:",
+        list(current.keys())
+    )
+    print(
+        "Оновлення інформації ДТЕК:",
+        page_update
+    )
+
+    for address, info in current.items():
+        print(
+            f"{address}: "
+            f"групи={info['groups']}, "
+            f"наступне відключення={info['next_outage']}, "
+            f"графік доступний={info['has_schedule']}"
+        )
 
 
 if __name__ == "__main__":
