@@ -1,5 +1,18 @@
 {
   "addresses": {
+    "Драгоманова, 25": {
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
+      "has_schedule": true,
+      "groups": [
+        "GPV48.1"
+      ],
+      "next_outage": null,
+      "graph_updated": "17.11.2026 21:28"
+    },
     "Драгоманова, 42": {
       "outage": false,
       "reason": "",
@@ -10,6 +23,7 @@
       "groups": [
         "GPV48.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     },
     "Драгоманова, 42А": {
@@ -22,6 +36,7 @@
       "groups": [
         "GPV48.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     },
     "Урлівська, 36": {
@@ -34,6 +49,7 @@
       "groups": [
         "GPV46.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     },
     "Петра Григоренка, 21": {
@@ -46,6 +62,7 @@
       "groups": [
         "GPV48.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     },
     "Петра Григоренка, 22/20": {
@@ -58,6 +75,7 @@
       "groups": [
         "GPV46.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     },
     "Анни Ахматової, 14Б": {
@@ -70,6 +88,7 @@
       "groups": [
         "GPV47.1"
       ],
+      "next_outage": null,
       "graph_updated": "17.11.2026 21:28"
     }
   }
