@@ -53,11 +53,11 @@
       "graph_updated": "19.11.2026 20:35"
     },
     "Петра Григоренка, 21": {
-      "outage": true,
-      "reason": "Аварійні ремонтні роботи",
-      "outage_type": "2",
-      "start_date": "06:22 20.11.2026",
-      "end_date": "10:22 20.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
