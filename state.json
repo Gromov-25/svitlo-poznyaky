@@ -11,7 +11,7 @@
         "GPV48.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Драгоманова, 42": {
       "outage": false,
@@ -24,7 +24,7 @@
         "GPV48.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Драгоманова, 42А": {
       "outage": false,
@@ -37,7 +37,7 @@
         "GPV48.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Урлівська, 36": {
       "outage": false,
@@ -50,7 +50,7 @@
         "GPV46.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Петра Григоренка, 21": {
       "outage": false,
@@ -63,7 +63,7 @@
         "GPV48.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Петра Григоренка, 22/20": {
       "outage": false,
@@ -76,7 +76,7 @@
         "GPV46.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     },
     "Анни Ахматової, 14Б": {
       "outage": false,
@@ -89,7 +89,7 @@
         "GPV47.1"
       ],
       "next_outage": null,
-      "graph_updated": "22.11.2026 22:59"
+      "graph_updated": "23.11.2026 10:47"
     }
   }
 }
