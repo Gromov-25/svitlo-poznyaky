@@ -40,11 +40,11 @@
       "graph_updated": "25.11.2026 22:03"
     },
     "Урлівська, 36": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "14:33 26.11.2026",
-      "end_date": "19:00 26.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -66,11 +66,11 @@
       "graph_updated": "25.11.2026 22:03"
     },
     "Петра Григоренка, 22/20": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "14:33 26.11.2026",
-      "end_date": "19:00 26.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV46.1"
@@ -79,11 +79,11 @@
       "graph_updated": "25.11.2026 22:03"
     },
     "Анни Ахматової, 14Б": {
-      "outage": true,
-      "reason": "Стабілізаційне відключення (Згідно графіку погодинних відключень)",
-      "outage_type": "2",
-      "start_date": "15:02 26.11.2026",
-      "end_date": "20:00 26.11.2026",
+      "outage": false,
+      "reason": "",
+      "outage_type": "",
+      "start_date": "",
+      "end_date": "",
       "has_schedule": true,
       "groups": [
         "GPV47.1"
