@@ -1,11 +1,11 @@
 {
   "addresses": {
     "Драгоманова, 25": {
-      "outage": false,
-      "reason": "",
-      "outage_type": "",
-      "start_date": "",
-      "end_date": "",
+      "outage": true,
+      "reason": "Аварійні ремонтні роботи",
+      "outage_type": "2",
+      "start_date": "14:56 26.11.2026",
+      "end_date": "06:56 28.11.2026",
       "has_schedule": true,
       "groups": [
         "GPV48.1"
